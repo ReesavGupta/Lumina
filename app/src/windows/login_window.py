@@ -39,7 +39,7 @@ class LoginWidget(QWidget):
         subtitle.setStyleSheet("color: #AAAAAA; font-size: 11px;")
         layout.addWidget(subtitle, alignment=Qt.AlignmentFlag.AlignLeft)
 
-        # Email field
+        # email field
         self.email_input = QLineEdit()
         self.email_input.setPlaceholderText("Email")
         self.email_input.setStyleSheet(
@@ -48,7 +48,7 @@ class LoginWidget(QWidget):
         )
         layout.addWidget(self.email_input)
 
-        # Password field
+        # password field
         self.password_input = QLineEdit()
         self.password_input.setPlaceholderText("Password")
         self.password_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -58,17 +58,17 @@ class LoginWidget(QWidget):
         )
         layout.addWidget(self.password_input)
 
-        # Consent checkbox (for signup)
+        # consent checkbox (for signup)
         self.consent_checkbox = QCheckBox("I consent to processing my data for wellness tracking.")
         self.consent_checkbox.setStyleSheet("color: #AAAAAA; font-size: 11px;")
         layout.addWidget(self.consent_checkbox)
 
-        # Error label (inline validation)
+        # error label (inline validation)
         self.error_label = QLabel("")
         self.error_label.setStyleSheet("color: #FF6B6B; font-size: 11px;")
         layout.addWidget(self.error_label)
 
-        # Button row
+        # button row
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
 

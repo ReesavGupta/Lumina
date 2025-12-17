@@ -1,3 +1,4 @@
+from datetime import datetime
 from pydantic import BaseModel, EmailStr
 
 class UserBase(BaseModel):
@@ -22,3 +23,7 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: str | None = None
+
+class BlinkSampleIn(BaseModel):
+    timestamp: datetime
+    count: int

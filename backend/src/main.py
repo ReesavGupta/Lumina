@@ -1,9 +1,12 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from models import user_model
+from models import blink_model
 from schemas import general_schemas
 from db.conn import Base, engine, get_db
+from typing import List
+from datetime import datetime
 from service.auth_service import (
     create_access_token,
     get_current_user,
@@ -58,6 +61,24 @@ def login(
 
     token = create_access_token({"sub": user.email})
     return {"access_token": token, "token_type": "bearer"}
+
+
+@app.post("/sync/blinks", status_code=status.HTTP_200_OK)
+def sync_blinks(
+    samples: List[general_schemas.BlinkSampleIn] = Body(...),
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    for sample in samples:
+        db.add(
+            blink_model.BlinkSample(
+                user_id=current_user.id,
+                timestamp=sample.timestamp,
+                count=sample.count,
+            )
+        )
+    db.commit()
+    return {"status": "ok", "received": len(samples)}
 
 @app.get("/auth/me", response_model=general_schemas.UserRead)
 def read_me(current_user: user_model.User = Depends(get_current_user)):
