@@ -1,17 +1,29 @@
-from PyQt6.QtWidgets import QVBoxLayout, QLabel, QWidget, QLineEdit, QHBoxLayout, QPushButton, QMessageBox
+from PyQt6.QtWidgets import (
+    QVBoxLayout,
+    QLabel,
+    QWidget,
+    QLineEdit,
+    QHBoxLayout,
+    QPushButton,
+    QMessageBox,
+    QCheckBox,
+)
 from PyQt6.QtCore import Qt, pyqtSignal
+
 from services.auth_service import AuthService, User, AuthError
 
-class LoginWindow(QWidget):
+class LoginWidget(QWidget):
+    """
+    Login/signup widget used as a centralWidget inside AppWindow.
+    """
+
     authenticated = pyqtSignal(User)
 
-    def __init__(self):
+    def __init__(self, auth_service: AuthService):
         super().__init__()
-        self.setWindowTitle("Lumina Wellness - Login")
-        self.setFixedSize(320, 260)
-        self.setStyleSheet("background-color: #0F0F0F; color: #FFFFFF;")
+        self.auth_service = auth_service
 
-        self.auth_service = AuthService()
+        self.setStyleSheet("background-color: #0F0F0F; color: #FFFFFF;")
         self._init_ui()
 
     def _init_ui(self):
@@ -46,6 +58,11 @@ class LoginWindow(QWidget):
         )
         layout.addWidget(self.password_input)
 
+        # Consent checkbox (for signup)
+        self.consent_checkbox = QCheckBox("I consent to processing my data for wellness tracking.")
+        self.consent_checkbox.setStyleSheet("color: #AAAAAA; font-size: 11px;")
+        layout.addWidget(self.consent_checkbox)
+
         # Error label (inline validation)
         self.error_label = QLabel("")
         self.error_label.setStyleSheet("color: #FF6B6B; font-size: 11px;")
@@ -54,6 +71,24 @@ class LoginWindow(QWidget):
         # Button row
         btn_row = QHBoxLayout()
         btn_row.addStretch(1)
+
+        signup_btn = QPushButton("Sign Up")
+        signup_btn.setStyleSheet(
+            """
+            QPushButton {
+                background-color: #333;
+                color: #FFF;
+                border-radius: 8px;
+                padding: 8px 14px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background-color: #444;
+            }
+            """
+        )
+        signup_btn.clicked.connect(self.handle_signup)
+        btn_row.addWidget(signup_btn)
 
         login_btn = QPushButton("Sign In")
         login_btn.setStyleSheet(
@@ -79,6 +114,23 @@ class LoginWindow(QWidget):
         layout.addLayout(btn_row)
         self.setLayout(layout)
 
+    def _show_error(self, msg: str):
+        self.error_label.setText(msg)
+
+    def handle_signup(self):
+        email = self.email_input.text()
+        password = self.password_input.text()
+        consent = self.consent_checkbox.isChecked()
+
+        try:
+            # signup does not log in; it just creates the account.
+            self.auth_service.signup(email, password, consent)
+            QMessageBox.information(self, "Signup Successful", "Account created. Please sign in.")
+        except AuthError as e:
+            self._show_error(str(e))
+        except Exception:
+            QMessageBox.critical(self, "Signup Failed", "An unexpected error occurred.")
+
     def handle_login(self):
         email = self.email_input.text()
         password = self.password_input.text()
@@ -86,12 +138,12 @@ class LoginWindow(QWidget):
         try:
             user = self.auth_service.login(email, password)
         except AuthError as e:
-            self.error_label.setText(str(e))
+            self._show_error(str(e))
             return
         except Exception:
             QMessageBox.critical(self, "Login Failed", "An unexpected error occurred.")
             return
 
-        # Clear any previous error and notify the app
+        # now we can just clear any previous error and notify the app
         self.error_label.setText("")
         self.authenticated.emit(user)

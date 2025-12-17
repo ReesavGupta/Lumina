@@ -9,7 +9,10 @@ from models import user_model
 from config import SECRET_KEY, ALGORITHM, access_token_expires
 from db.conn import get_db
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+# Use pbkdf2_sha256 instead of bcrypt to avoid Windows-specific bcrypt backend issues
+# and the 72-byte password limitation.
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
 

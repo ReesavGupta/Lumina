@@ -63,3 +63,7 @@ def login(
 def read_me(current_user: user_model.User = Depends(get_current_user)):
     """Example protected endpoint the web dashboard can call later."""
     return current_user
+
+if __name__ == "__main__":
+    import uvicorn
+    uvicorn.run(app="main:app", host="localhost", port=8080, reload=True)

@@ -1,95 +1,43 @@
 import sys
-import psutil
-from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QFrame
-from PyQt6.QtCore import QTimer, Qt
-from src.tracker import EyeTrackerThread
-from services.auth_service import User
-from windows.login_window import LoginWindow
+from PyQt6.QtWidgets import QApplication, QMainWindow
+from services.auth_service import AuthService, User
+from windows.login_window import LoginWidget
+from windows.dashboard_widget import DashboardWidget
 
-class MainWindow(QMainWindow):
-    def __init__(self, user: User):
+class AppWindow(QMainWindow):
+    """
+    this is a single top-level window that behaves like an "spa":
+    - shows LoginWidget if no valid session.
+    - switches centralWidget to DashboardWidget after login.
+    """
+
+    def __init__(self):
         super().__init__()
-        self.user = user
 
         self.setWindowTitle("Lumina Wellness")
         self.setFixedSize(350, 500)
         self.setStyleSheet("background-color: #0F0F0F; color: #FFFFFF;")
 
-        self.init_ui()
+        self.auth_service = AuthService()
 
-        # Initialize and start silent tracker
-        self.tracker = EyeTrackerThread()
-        self.tracker.blink_detected.connect(self.update_blinks)
-        self.tracker.start()
+        # yaha the initial view is decided based on stored session
+        user = self.auth_service.load_session()
+        if user and user.token:
+            self.show_dashboard(user)
+        else:
+            self.show_login()
 
-        # Performance Timer
-        self.stats_timer = QTimer()
-        self.stats_timer.timeout.connect(self.update_stats)
-        self.stats_timer.start(2000)
+    def show_login(self):
+        login_widget = LoginWidget(self.auth_service)
+        login_widget.authenticated.connect(self.show_dashboard)
+        self.setCentralWidget(login_widget)
 
-    def init_ui(self):
-        main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(30, 40, 30, 40)
-        main_layout.setSpacing(20)
-
-        # Status Badge
-        self.status_label = QLabel("●  MONITORING ACTIVE")
-        self.status_label.setStyleSheet("color: #00FF88; font-weight: bold; font-size: 11px;")
-        main_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignLeft)
-
-        # Logged-in user label
-        user_label = QLabel(f"Signed in as {self.user.email}")
-        user_label.setStyleSheet("color: #888; font-size: 11px;")
-        main_layout.addWidget(user_label, alignment=Qt.AlignmentFlag.AlignLeft)
-
-        # Blink Counter Section
-        blink_box = QFrame()
-        blink_box.setStyleSheet("background-color: #1A1A1A; border-radius: 15px;")
-        blink_layout = QVBoxLayout(blink_box)
-
-        title = QLabel("TOTAL BLINKS")
-        title.setStyleSheet("color: #888; font-size: 12px; letter-spacing: 1px;")
-        self.count_label = QLabel("0")
-        self.count_label.setStyleSheet("font-size: 80px; font-weight: 800; border: none;")
-
-        blink_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
-        blink_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
-        main_layout.addWidget(blink_box)
-
-        # System Metrics Section
-        self.cpu_label = QLabel("CPU USAGE: 0%")
-        self.mem_label = QLabel("MEMORY: 0 MB")
-        for lbl in [self.cpu_label, self.mem_label]:
-            lbl.setStyleSheet("color: #AAA; font-size: 13px; font-family: monospace;")
-            main_layout.addWidget(lbl)
-
-        container = QWidget()
-        container.setLayout(main_layout)
-        self.setCentralWidget(container)
-
-    def update_blinks(self, count: int):
-        self.count_label.setText(str(count))
-
-    def update_stats(self):
-        cpu = psutil.cpu_percent()
-        mem = psutil.Process().memory_info().rss / (1024 * 1024)
-        self.cpu_label.setText(f"CPU USAGE: {cpu:>5}%")
-        self.mem_label.setText(f"MEMORY: {int(mem):>6} MB")
-
+    def show_dashboard(self, user: User):
+        dashboard = DashboardWidget(user=user)
+        self.setCentralWidget(dashboard)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-
-    login_window = LoginWindow()
-    main_window = {"ref": None}  # keep a reference to avoid garbage collection
-
-    def on_authenticated(user: User):
-        window = MainWindow(user=user)
-        main_window["ref"] = window
-        window.show()
-        login_window.close()
-
-    login_window.authenticated.connect(on_authenticated)
-    login_window.show()
-
+    window = AppWindow()
+    window.show()
     sys.exit(app.exec())
