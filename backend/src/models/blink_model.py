@@ -12,5 +12,7 @@ class BlinkSample(Base):
     user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
     timestamp = Column(DateTime, nullable=False)
     count = Column(Integer, nullable=False)
+    session_id = Column(Integer, ForeignKey("sessions.id"), nullable=True)
 
     user = relationship(User)
+    session = relationship("Session", back_populates="blink_samples")

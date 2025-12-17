@@ -15,16 +15,53 @@ class SyncWorker(QThread):
     def run(self):
         while self.running:
             try:
-                self._sync_once()
+                self._sync_sessions()
+                self._sync_blinks()
             except Exception:
-                # if fails then we would want this to fail silently lol; so it can try again next cycle
+                # yaha pe we are failing silently so it can try again next cycle even if the user is offline
                 pass
             time.sleep(self.interval)
 
     def stop(self):
         self.running = False
 
-    def _sync_once(self):
+    def _sync_sessions(self):
+        """Sync unsynced sessions to cloud."""
+        if not self.user.token:
+            return
+
+        sessions = local_db.get_unsynced_sessions(self.user.email)
+        if not sessions:
+            return
+
+        payload = []
+        for (local_id, user_email, name, start_time, end_time) in sessions:
+            payload.append({
+                "id": local_id,  # We'll use this to map back
+                "name": name,
+                "start_time": start_time,
+                "end_time": end_time,
+            })
+
+        resp = requests.post(
+            f"{API_BASE_URL}/sync/sessions",
+            json=payload,
+            headers={"Authorization": f"Bearer {self.user.token}"},
+            timeout=10,
+        )
+        if resp.status_code == 200:
+            data = resp.json()
+            # Map local IDs to cloud IDs
+            cloud_ids = data.get("ids", [])
+            for i, (local_id, _, _, _, _) in enumerate(sessions):
+                if i < len(cloud_ids):
+                    cloud_id = cloud_ids[i]
+                else:
+                    cloud_id = None
+                local_db.mark_session_synced(local_id, cloud_id)
+
+    def _sync_blinks(self):
+        """Sync unsynced blinks to cloud."""
         if not self.user.token:
             return
 
@@ -33,8 +70,12 @@ class SyncWorker(QThread):
             return
 
         payload = [
-            {"timestamp": ts, "count": count}
-            for (_id, ts, count) in rows
+            {
+                "timestamp": ts,
+                "count": count,
+                "session_id": session_id
+            }
+            for (_id, ts, count, session_id) in rows
         ]
 
         resp = requests.post(

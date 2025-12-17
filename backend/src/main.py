@@ -1,3 +1,5 @@
+from models import session_model
+from typing import Optional
 from fastapi import FastAPI, Depends, HTTPException, status, Body
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -62,7 +64,7 @@ def login(
     token = create_access_token({"sub": user.email})
     return {"access_token": token, "token_type": "bearer"}
 
-
+    
 @app.post("/sync/blinks", status_code=status.HTTP_200_OK)
 def sync_blinks(
     samples: List[general_schemas.BlinkSampleIn] = Body(...),
@@ -75,10 +77,135 @@ def sync_blinks(
                 user_id=current_user.id,
                 timestamp=sample.timestamp,
                 count=sample.count,
+                session_id=sample.session_id,
             )
         )
     db.commit()
     return {"status": "ok", "received": len(samples)}
+
+
+
+# ========== SESSION ENDPOINTS ==========
+
+@app.post("/sessions", response_model=general_schemas.SessionRead, status_code=status.HTTP_201_CREATED)
+def create_session(
+    session_in: general_schemas.SessionCreate,
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Create a new tracking session."""
+    session = session_model.Session(
+        user_id=current_user.id,
+        name=session_in.name,
+        start_time=session_in.start_time,
+    )
+    db.add(session)
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@app.get("/sessions", response_model=List[general_schemas.SessionRead])
+def list_sessions(
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """List all sessions for the current user."""
+    sessions = db.query(session_model.Session).filter(
+        session_model.Session.user_id == current_user.id
+    ).order_by(session_model.Session.start_time.desc()).all()
+    return sessions
+
+
+@app.get("/sessions/{session_id}", response_model=general_schemas.SessionWithBlinks)
+def get_session(
+    session_id: int,
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get a session with its blink samples."""
+    session = db.query(session_model.Session).filter(
+        session_model.Session.id == session_id,
+        session_model.Session.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    return session
+
+
+@app.patch("/sessions/{session_id}", response_model=general_schemas.SessionRead)
+def update_session(
+    session_id: int,
+    session_update: general_schemas.SessionUpdate,
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Update a session (name, end_time)."""
+    session = db.query(session_model.Session).filter(
+        session_model.Session.id == session_id,
+        session_model.Session.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    
+    if session_update.name is not None:
+        session.name = session_update.name
+    if session_update.end_time is not None:
+        session.end_time = session_update.end_time
+    
+    db.commit()
+    db.refresh(session)
+    return session
+
+
+@app.delete("/sessions/{session_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_session(
+    session_id: int,
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Delete a session."""
+    session = db.query(session_model.Session).filter(
+        session_model.Session.id == session_id,
+        session_model.Session.user_id == current_user.id
+    ).first()
+    if not session:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Session not found"
+        )
+    db.delete(session)
+    db.commit()
+    return None
+
+
+@app.post("/sync/sessions", status_code=status.HTTP_200_OK)
+def sync_sessions(
+    sessions_data: List[dict] = Body(...),
+    current_user: user_model.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Sync sessions from local DB. Expects list of {id, name, start_time, end_time}."""
+    created_ids = []
+    for sess_data in sessions_data:
+        session = session_model.Session(
+            user_id=current_user.id,
+            name=sess_data.get("name"),
+            start_time=datetime.fromisoformat(sess_data["start_time"]),
+            end_time=datetime.fromisoformat(sess_data["end_time"]) if sess_data.get("end_time") else None,
+        )
+        db.add(session)
+        db.flush()  # Get the ID
+        created_ids.append(session.id)
+    db.commit()
+    return {"status": "ok", "created": len(created_ids), "ids": created_ids}
+
 
 @app.get("/auth/me", response_model=general_schemas.UserRead)
 def read_me(current_user: user_model.User = Depends(get_current_user)):
