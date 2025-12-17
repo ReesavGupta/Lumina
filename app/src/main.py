@@ -3,16 +3,20 @@ import psutil
 from PyQt6.QtWidgets import QApplication, QMainWindow, QVBoxLayout, QLabel, QWidget, QFrame
 from PyQt6.QtCore import QTimer, Qt
 from src.tracker import EyeTrackerThread
+from services.auth_service import User
+from windows.login_window import LoginWindow
 
 class MainWindow(QMainWindow):
-    def __init__(self):
+    def __init__(self, user: User):
         super().__init__()
+        self.user = user
+
         self.setWindowTitle("Lumina Wellness")
         self.setFixedSize(350, 500)
         self.setStyleSheet("background-color: #0F0F0F; color: #FFFFFF;")
-        
+
         self.init_ui()
-        
+
         # Initialize and start silent tracker
         self.tracker = EyeTrackerThread()
         self.tracker.blink_detected.connect(self.update_blinks)
@@ -33,16 +37,21 @@ class MainWindow(QMainWindow):
         self.status_label.setStyleSheet("color: #00FF88; font-weight: bold; font-size: 11px;")
         main_layout.addWidget(self.status_label, alignment=Qt.AlignmentFlag.AlignLeft)
 
+        # Logged-in user label
+        user_label = QLabel(f"Signed in as {self.user.email}")
+        user_label.setStyleSheet("color: #888; font-size: 11px;")
+        main_layout.addWidget(user_label, alignment=Qt.AlignmentFlag.AlignLeft)
+
         # Blink Counter Section
         blink_box = QFrame()
         blink_box.setStyleSheet("background-color: #1A1A1A; border-radius: 15px;")
         blink_layout = QVBoxLayout(blink_box)
-        
+
         title = QLabel("TOTAL BLINKS")
         title.setStyleSheet("color: #888; font-size: 12px; letter-spacing: 1px;")
         self.count_label = QLabel("0")
         self.count_label.setStyleSheet("font-size: 80px; font-weight: 800; border: none;")
-        
+
         blink_layout.addWidget(title, alignment=Qt.AlignmentFlag.AlignCenter)
         blink_layout.addWidget(self.count_label, alignment=Qt.AlignmentFlag.AlignCenter)
         main_layout.addWidget(blink_box)
@@ -58,7 +67,7 @@ class MainWindow(QMainWindow):
         container.setLayout(main_layout)
         self.setCentralWidget(container)
 
-    def update_blinks(self, count):
+    def update_blinks(self, count: int):
         self.count_label.setText(str(count))
 
     def update_stats(self):
@@ -67,8 +76,20 @@ class MainWindow(QMainWindow):
         self.cpu_label.setText(f"CPU USAGE: {cpu:>5}%")
         self.mem_label.setText(f"MEMORY: {int(mem):>6} MB")
 
+
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    window = MainWindow()
-    window.show()
+
+    login_window = LoginWindow()
+    main_window = {"ref": None}  # keep a reference to avoid garbage collection
+
+    def on_authenticated(user: User):
+        window = MainWindow(user=user)
+        main_window["ref"] = window
+        window.show()
+        login_window.close()
+
+    login_window.authenticated.connect(on_authenticated)
+    login_window.show()
+
     sys.exit(app.exec())
